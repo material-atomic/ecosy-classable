@@ -2,11 +2,6 @@
 
 A type-safe, zero-dependency class composition engine with dependency injection, lifecycle hooks, and automatic garbage collection — built on a single algebraic axiom.
 
-> *Classable sinh — mọi class đều quy về*
-> *Factory chuyển — lazy hay sync tùy duyên*
-> *Container giữ — Executor buông*
-> *Một type duy nhất — vạn vật nên.*
-
 ## Features
 
 - **Single axiom** — `Classable<T> = ClassStatic | ClassFactory`, everything derives from it
