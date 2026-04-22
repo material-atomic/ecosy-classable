@@ -64,6 +64,8 @@
     "prepublishOnly": "yarn clean && yarn build",
     "dev": "rollup -c --watch",
     "lint": "eslint src/",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "lint:fix": "eslint src/ --fix",
     "format": "prettier --write src/",
     "format:check": "prettier --check src/"
@@ -95,6 +97,7 @@
     "prettier": "^3.8.1",
     "rimraf": "^6.1.3",
     "rollup": "^4.59.1",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.5"
   }
 }
