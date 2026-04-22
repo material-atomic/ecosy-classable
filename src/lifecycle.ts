@@ -1,5 +1,13 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { Injectable, type InjectClassable, type InjectableBuidlerLike, type InjectedInstances, type InjectMap } from "./injectable";
+ 
+import {
+  Injectable,
+  type InjectClassable,
+  type InjectableBuidlerLike,
+  type InjectedInstances,
+  type InjectMap,
+} from "./injectable";
+
+export type { InjectClassable };
 import type { ClassType } from "./types";
 import type { StaticExtended } from "./placeholder";
 
@@ -71,7 +79,7 @@ export interface LifecycleDescriptor {
  */
 export type WithDescriptor<
   Descriptor extends LifecycleDescriptor,
-  Instance = any
+  Instance = unknown,
 > = StaticExtended<{ descriptor: Descriptor }, Instance>;
 
 /**
@@ -84,7 +92,7 @@ export type LifecycleOptions<
 > = Partial<Descriptor> & {
   /** Optional inject map (forwarded to {@link Injectable}). */
   injects?: Injects;
-}
+};
 
 /** Static members exposed on a Lifecycle-branded class. */
 export interface LifecycleStatic<Descriptor extends LifecycleDescriptor> {
@@ -122,20 +130,43 @@ export function Lifecycle<
   const { injects = {}, ...descriptor } = options;
 
   const Builder = Injectable<Injects>(injects as Injects);
-  const LifecycleBuilder = Builder as ClassType<any> & InjectableBuidlerLike;
+  const LifecycleBuilder = Builder as ClassType<object> & InjectableBuidlerLike;
 
   type LifecycleBuilderClass = typeof Builder;
-  type LifecycleClass = LifecycleBuilderClass extends StaticExtended<infer StaticBuilder, infer Instance>
-    ? StaticExtended<StaticBuilder & LifecycleStatic<Descriptor> & InjectableBuidlerLike, Instance>
-    : StaticExtended<LifecycleStatic<Descriptor> & InjectableBuidlerLike, InjectedInstances<Injects>>
+  type LifecycleClass =
+    LifecycleBuilderClass extends StaticExtended<infer StaticBuilder, infer Instance>
+      ? StaticExtended<
+          StaticBuilder & LifecycleStatic<Descriptor> & InjectableBuidlerLike,
+          Instance
+        >
+      : StaticExtended<
+          LifecycleStatic<Descriptor> & InjectableBuidlerLike,
+          InjectedInstances<Injects>
+        >;
 
   return class LifecycleImpl extends LifecycleBuilder {
-    static readonly descriptor = {
+    /**
+     * Deduplicated, frozen lifecycle descriptor.
+     *
+     * **Immutability:** Both the outer descriptor object and each hook array
+     * are frozen. `readonly` alone is a TS-only signal — the `Object.freeze`
+     * wrapper enforces the contract at runtime, so neither the arrays nor
+     * the descriptor shape can be mutated after class definition.
+     *
+     * **Deduplication:** Hook arrays are deduped via `Set` using **reference
+     * equality**. Two entries wrapping the same target class (e.g. two
+     * distinct inline factory objects pointing at the same `AuthGuard`) are
+     * considered distinct unless they share the same reference. Semantic
+     * dedup (by `classable.getTarget`) is intentionally not performed — it
+     * would require defining precedence rules and would cost ordering
+     * guarantees. If that becomes a real pain point, revisit.
+     */
+    static readonly descriptor = Object.freeze({
       ...descriptor,
-      guards: Object.freeze([...Array.from(new Set(descriptor.guards ?? []))]),
-      filters: Object.freeze([...Array.from(new Set(descriptor.filters ?? []))]),
-      interceptors: Object.freeze([...Array.from(new Set(descriptor.interceptors ?? []))]),
-      pipes: Object.freeze([...Array.from(new Set(descriptor.pipes ?? []))]),
-    } as Descriptor;
+      guards: Object.freeze([...new Set(descriptor.guards ?? [])]),
+      filters: Object.freeze([...new Set(descriptor.filters ?? [])]),
+      interceptors: Object.freeze([...new Set(descriptor.interceptors ?? [])]),
+      pipes: Object.freeze([...new Set(descriptor.pipes ?? [])]),
+    }) as Descriptor;
   } as LifecycleClass;
 }
