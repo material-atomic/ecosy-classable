@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import type { Classable, ClassType, Readonlyable } from "./types";
+import type { ClassType, Readonlyable } from "./types";
 
 /**
  * Null Object class used as a type-safe default in generic contexts.
@@ -21,7 +21,7 @@ export class Placeholder {
 export const placeholder = Object.freeze({
   target: Placeholder,
   get: () => [] as const,
-  getter: "getInstance"
+  getter: "getInstance",
 });
 
 /**
@@ -39,7 +39,7 @@ export type ThisExtended<Extend> = Placeholder & Extend;
  */
 export type StaticExtended<
   Extend,
-  InstanceType = any,
+  InstanceType = unknown,
   Args extends Readonlyable<any[]> = [],
 > = ClassType<InstanceType, [...Args]> & Extend;
 
@@ -84,20 +84,8 @@ export const placeholderInstance = Object.freeze({
   selector: () => ({ method: "getInstance", args: [] as [] }),
 });
 
-/**
- * A function that selects a {@link Classable} and its constructor arguments
- * from a list of candidates, optionally based on a runtime context.
- *
- * @typeParam InstanceType - The instance type to produce.
- * @typeParam Args - Constructor arguments for the selected classable.
- * @typeParam Runtime - Optional runtime context type.
- */
-export type ClassableSelector<
-  InstanceType,
-  Args extends Readonlyable<any[]> = [],
-  Runtime = never,
-> = (
-  ...args: Runtime extends never
-    ? Array<Classable<any, any[], string, Runtime>>
-    : [runtime: Runtime, ...Array<Classable<any, any[], string, Runtime>>]
-) => [Classable<InstanceType, Args>, Args] | Promise<[Classable<InstanceType, Args>, Args]>;
+// NOTE: The canonical `ClassableSelector` lives in `./classable` and is the
+// one re-exported from the package root. An earlier 3-param variant used to
+// live here; it has been removed to avoid name-collision drift between
+// direct imports of this module and package-level imports. If you need the
+// selector type, import it from `./classable` (or the package root).

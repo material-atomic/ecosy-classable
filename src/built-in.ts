@@ -14,8 +14,9 @@ export type LiteralObject<Keys extends PropertyKey = PropertyKey> =
   | object;
 
 /** A single-key object mapping `Key` to `Value`. */
-export type AtomicObject<Key extends PropertyKey = PropertyKey, Value = unknown> =
-  { [K in Key]: Value };
+export type AtomicObject<Key extends PropertyKey = PropertyKey, Value = unknown> = {
+  [K in Key]: Value;
+};
 
 /** A value that may be either synchronous or wrapped in a `Promise`. */
 export type Promisable<Value> = Value | Promise<Value>;
@@ -27,11 +28,10 @@ export type Promisable<Value> = Value | Promise<Value>;
  * @param key - The property key to look for.
  * @returns `true` if the object has the specified own property.
  */
-export function hasOwnProperty<
-  Obj,
-  Key extends PropertyKey,
-  As = unknown
->(obj: Obj, key: Key): obj is Obj & Record<Key, As> {
+export function hasOwnProperty<Obj, Key extends PropertyKey, As = unknown>(
+  obj: Obj,
+  key: Key,
+): obj is Obj & Record<Key, As> {
   if (!obj) {
     return false;
   }
@@ -41,7 +41,6 @@ export function hasOwnProperty<
   }
 
   return (
-    Object.prototype.hasOwnProperty.call(obj, key) ||
-    key in (obj as Record<PropertyKey, unknown>)
+    Object.prototype.hasOwnProperty.call(obj, key) || key in (obj as Record<PropertyKey, unknown>)
   );
 }

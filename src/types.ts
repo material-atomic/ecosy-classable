@@ -13,8 +13,9 @@ export type Readonlyable<T> = T extends Readonly<infer U> ? U | Readonly<U> : T 
  * @typeParam Instance - The type of object the constructor produces.
  * @typeParam Args - Constructor parameter types.
  */
-export type ClassType<Instance = unknown, Args extends Readonlyable<any[]> = []> =
-  new (...args: Args) => Instance;
+export type ClassType<Instance = unknown, Args extends Readonlyable<any[]> = []> = new (
+  ...args: Args
+) => Instance;
 
 /** Shorthand for a class with any constructor arguments. */
 export type AnyClass<T> = ClassType<T, any[]>;
@@ -48,7 +49,7 @@ export type AnyConstructor = ClassType<any, any[]> | AbstractClassType<any, any[
 export type ClassStatic<
   Static extends LiteralObject = LiteralObject,
   Instance = unknown,
-  Args extends Readonlyable<any[]> = []
+  Args extends Readonlyable<any[]> = [],
 > = ClassType<Instance, Args> & Static;
 
 /**
@@ -65,19 +66,10 @@ export interface ClassFactory<
   Instance = unknown,
   Args extends Readonlyable<any[]> = [],
   Getter extends string = string,
-  Runtime = never
+  Runtime = never,
 > {
   /** The target class (may include a static getter method). */
-  target: ClassStatic<
-    Partial<
-      AtomicObject<
-        Getter,
-        ClassType<Instance, Args>
-      >
-    >,
-    Instance,
-    Args
-  >;
+  target: ClassStatic<Partial<AtomicObject<Getter, ClassType<Instance, Args>>>, Instance, Args>;
   /** Resolves constructor/getter arguments. May be sync or async. */
   get?: (...args: Runtime extends never ? [] : [runtime: Runtime]) => Promisable<Args>;
   /** Optional static method name to call instead of `new`. */
@@ -92,19 +84,10 @@ export interface ClassFactorySync<
   Instance = unknown,
   Args extends Readonlyable<any[]> = [],
   Getter extends string = string,
-  Runtime = never
+  Runtime = never,
 > {
   /** The target class. */
-  target: ClassStatic<
-    Partial<
-      AtomicObject<
-        Getter,
-        ClassType<Instance, Args>
-      >
-    >,
-    Instance,
-    Args
-  >;
+  target: ClassStatic<Partial<AtomicObject<Getter, ClassType<Instance, Args>>>, Instance, Args>;
   /** Synchronously resolves constructor/getter arguments. */
   get?: (...args: Runtime extends never ? [] : [runtime: Runtime]) => Args;
   /** Optional static method name to call instead of `new`. */
@@ -119,19 +102,10 @@ export interface ClassFactoryAsync<
   Instance = unknown,
   Args extends Readonlyable<any[]> = [],
   Getter extends string = string,
-  Runtime = never
+  Runtime = never,
 > {
   /** The target class. */
-  target: ClassStatic<
-    Partial<
-      AtomicObject<
-        Getter,
-        ClassType<Instance, Args>
-      >
-    >,
-    Instance,
-    Args
-  >;
+  target: ClassStatic<Partial<AtomicObject<Getter, ClassType<Instance, Args>>>, Instance, Args>;
   /** Asynchronously resolves constructor/getter arguments. */
   get?: (...args: Runtime extends never ? [] : [runtime: Runtime]) => Promise<Args>;
   /** Optional static method name to call instead of `new`. */
@@ -149,18 +123,9 @@ export type Classable<
   Instance = unknown,
   Args extends Readonlyable<any[]> = [],
   Getter extends string = string,
-  Runtime = never
+  Runtime = never,
 > =
-  | ClassStatic<
-    Partial<
-      AtomicObject<
-        Getter,
-        ClassType<Instance, Args>
-      >
-    >,
-    Instance,
-    Args
-  >
+  | ClassStatic<Partial<AtomicObject<Getter, ClassType<Instance, Args>>>, Instance, Args>
   | ClassFactory<Instance, Args, Getter, Runtime>;
 
 /** Synchronous-only variant of {@link Classable}. */
@@ -168,18 +133,9 @@ export type ClassableSync<
   Instance = unknown,
   Args extends Readonlyable<any[]> = [],
   Getter extends string = string,
-  Runtime = never
+  Runtime = never,
 > =
-  | ClassStatic<
-    Partial<
-      AtomicObject<
-        Getter,
-        ClassType<Instance, Args>
-      >
-    >,
-    Instance,
-    Args
-  >
+  | ClassStatic<Partial<AtomicObject<Getter, ClassType<Instance, Args>>>, Instance, Args>
   | ClassFactorySync<Instance, Args, Getter, Runtime>;
 
 /** Asynchronous-only variant of {@link Classable}. */
@@ -187,44 +143,27 @@ export type ClassableAsync<
   Instance = unknown,
   Args extends Readonlyable<any[]> = [],
   Getter extends string = string,
-  Runtime = never
+  Runtime = never,
 > =
-  | ClassStatic<
-    Partial<
-      AtomicObject<
-        Getter,
-        ClassType<Instance, Args>
-      >
-    >,
-    Instance,
-    Args
-  >
+  | ClassStatic<Partial<AtomicObject<Getter, ClassType<Instance, Args>>>, Instance, Args>
   | ClassFactoryAsync<Instance, Args, Getter, Runtime>;
 
 /**
  * Extracts the underlying target class from a {@link Classable}.
  * Works for both plain constructors and factory descriptors.
+ *
+ * Constraint is structural (`{ target } | constructor`) rather than
+ * `Classable<…, any>` to avoid contravariance on the `get` parameter
+ * when `Runtime` differs between definition and call site.
  */
-export type ClassableTarget<Cls extends Classable<any, any, any, any>, Getter extends string = string> =
-  Cls extends {
-    target: ClassStatic<any, infer Target, any>;
-    get?: (...args: any[]) => Promisable<[...infer Args]>
-  }
-    ? ClassStatic<
-      Partial<
-        AtomicObject<
-          Getter,
-          ClassType<Target, Readonlyable<Args>>
-        >
-      >
-    >
-    : Cls extends (new (...args: infer Args) => infer Target)
-      ? ClassStatic<
-          Partial<
-            AtomicObject<
-              Getter,
-              ClassType<Target, Readonlyable<Args>>
-            >
-          >
-        >
-      : never;
+export type ClassableTarget<
+  Cls extends { target: new (...args: any[]) => any; [k: string]: any } | (new (...args: any[]) => any),
+  Getter extends string = string,
+> = Cls extends {
+  target: ClassStatic<any, infer Target, any>;
+  get?: (...args: any[]) => Promisable<[...infer Args]>;
+}
+  ? ClassStatic<Partial<AtomicObject<Getter, ClassType<Target, Readonlyable<Args>>>>, Target, Readonlyable<Args>>
+  : Cls extends new (...args: infer Args) => infer Target
+    ? ClassStatic<Partial<AtomicObject<Getter, ClassType<Target, Readonlyable<Args>>>>, Target, Readonlyable<Args>>
+    : never;

@@ -1,12 +1,34 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { hasOwnProperty } from "./built-in";
-import { type InstanceByStatic, placeholder, Placeholder, placeholderInstance } from "./placeholder";
-import type { AnyAbstractClass, AnyClass, Classable, ClassableTarget, ClassFactory, ClassFactoryAsync, ClassFactorySync, ClassStatic, ClassType, Readonlyable } from "./types";
+import {
+  type InstanceByStatic,
+  placeholder,
+  Placeholder,
+  placeholderInstance,
+} from "./placeholder";
+import type {
+  AnyAbstractClass,
+  AnyClass,
+  Classable,
+  ClassableTarget,
+  ClassFactory,
+  ClassFactoryAsync,
+  ClassFactorySync,
+  ClassStatic,
+  ClassType,
+  Readonlyable,
+} from "./types";
 import type { AtomicObject } from "./built-in";
 
 /**
  * A function that selects a {@link Classable} and its constructor arguments
  * from a list of candidates, optionally based on a runtime context.
+ *
+ * **Async compatibility note:** the return type permits a `Promise` for
+ * forward compatibility, but `Injectable`'s synchronous resolver currently
+ * rejects Promise-returning selectors at construction time. Treat async
+ * selectors as type-level-allowed but runtime-restricted until a dedicated
+ * async container/executor consumes them.
  *
  * @typeParam InstanceType - The instance type to produce.
  * @typeParam Args - Constructor arguments for the selected classable.
@@ -22,7 +44,9 @@ export type ClassableSelector<
   ...args: Runtime extends never
     ? Array<Classable<any, any[], string, Runtime>>
     : [runtime: Runtime, ...Array<Classable<any, any[], string, Runtime>>]
-) => [Classable<InstanceType, Args, Getter, Runtime>, Args] | Promise<[Classable<InstanceType, Args, Getter, Runtime>, Args]>;
+) =>
+  | [Classable<InstanceType, Args, Getter, Runtime>, Args]
+  | Promise<[Classable<InstanceType, Args, Getter, Runtime>, Args]>;
 
 /**
  * The core API of the Classable type system.
@@ -72,7 +96,7 @@ class ClassableAPI {
     InstanceType,
     Args extends Readonlyable<any[]> = [],
     Getter extends string = string,
-    Runtime = never
+    Runtime = never,
   >(obj: unknown): obj is ClassFactory<InstanceType, Args, Getter, Runtime> {
     return (
       hasOwnProperty(obj, "target") &&
@@ -93,18 +117,13 @@ class ClassableAPI {
     InstanceType,
     Args extends Readonlyable<any[]> = [],
     Getter extends string = string,
-    Runtime = never
+    Runtime = never,
   >(
     cls: ClassStatic<
-      Partial<
-        AtomicObject<
-          Getter,
-          ClassType<InstanceType, Args>
-        >
-      >,
+      Partial<AtomicObject<Getter, ClassType<InstanceType, Args>>>,
       InstanceType,
       Args
-    >
+    >,
   ): ClassFactory<InstanceType, Args, Getter, Runtime> {
     if (this.isFactory<InstanceType, Args, Getter, Runtime>(cls)) {
       return cls;
@@ -125,14 +144,20 @@ class ClassableAPI {
    * @returns The resolved target class.
    */
   getTarget<
-    Getter extends string,
-    Cls extends Classable<any, any, Getter, any> = Classable<any, any, Getter, any>
-  >(cls: Cls): ClassableTarget<Cls, Getter> {
-    if (this.isFactory<any, any, Getter, any>(cls)) {
-      return cls.target as ClassableTarget<Cls, Getter>;
+    Instance = never,
+    Getter extends string = string,
+    Cls extends { target: new (...args: any[]) => any; [k: string]: any } | (new (...args: any[]) => any) =
+      { target: new (...args: any[]) => any; [k: string]: any } | (new (...args: any[]) => any),
+  >(cls: Cls): [Instance] extends [never]
+    ? ClassableTarget<Cls, Getter> extends infer R extends (new (...args: any[]) => any)
+      ? R
+      : ClassType<any, any[]>
+    : ClassType<Instance, any[]> {
+    if (typeof cls === "object" && cls !== null && "target" in cls) {
+      return (cls as any).target;
     }
 
-    return cls as unknown as ClassableTarget<Cls, Getter>;
+    return cls as any;
   }
 
   /**
@@ -148,22 +173,25 @@ class ClassableAPI {
     InstanceType,
     Args extends Readonlyable<any[]> = [],
     Getter extends string = string,
-    Runtime = never
+    Runtime = never,
   >(
     base: Classable<InstanceType, Args, Getter, Runtime>,
     resolve: ClassFactory<InstanceType, Args, Getter, Runtime>["get"],
-    getter?: Getter
+    getter?: Getter,
   ): ClassFactory<InstanceType, Args, Getter, Runtime> {
     const normalized = classable.isFactory<InstanceType, Args, Getter, Runtime>(base)
       ? base
-      : (classable.toFactory(
-          base as ClassType<InstanceType, [...Args]>
-        ) as unknown as ClassFactory<InstanceType, Args, Getter, Runtime>);
+      : (classable.toFactory(base as ClassType<InstanceType, [...Args]>) as unknown as ClassFactory<
+          InstanceType,
+          Args,
+          Getter,
+          Runtime
+        >);
     return {
       target: normalized.target,
       get: resolve,
       getter,
-    }; 
+    };
   }
 
   /**
@@ -179,19 +207,16 @@ class ClassableAPI {
     InstanceType,
     Args extends Readonlyable<any[]> = [],
     Getter extends string = string,
-    Runtime = never
+    Runtime = never,
   >(
     cls: Classable<InstanceType, Args, Getter, Runtime>,
-    wrapper: (target: ClassType<InstanceType, Args>) => ClassStatic<
-      Partial<
-        AtomicObject<
-          Getter,
-          ClassType<InstanceType, Args>
-        >
-      >,
+    wrapper: (
+      target: ClassType<InstanceType, Args>,
+    ) => ClassStatic<
+      Partial<AtomicObject<Getter, ClassType<InstanceType, Args>>>,
       InstanceType,
       Args
-    >
+    >,
   ): Classable<InstanceType, Args, Getter, Runtime> {
     if (classable.isFactory<InstanceType, Args, Getter, Runtime>(cls)) {
       return {
@@ -237,15 +262,12 @@ class ClassableAPI {
     Method extends string = "factory",
     Args extends Readonlyable<any[]> = [],
     Runtime = never,
-  >(
-    def: InstanceByStatic<InstanceType, Method, Args, Runtime>,
-    runtime?: Runtime
-  ): InstanceType {
+  >(def: InstanceByStatic<InstanceType, Method, Args, Runtime>, runtime?: Runtime): InstanceType {
     const { target: StaticClass, selector } = def;
     const { method, args } = selector(
       ...((runtime === undefined ? [] : [runtime]) as Runtime extends never
         ? []
-        : [runtime: Runtime])
+        : [runtime: Runtime]),
     );
     return StaticClass[method](...(args as unknown as [...Args]));
   }
@@ -262,10 +284,8 @@ class ClassableAPI {
     InstanceType,
     Args extends Readonlyable<any[]> = [],
     Getter extends string = string,
-    Runtime = never
-  >(
-    find: ClassableSelector<InstanceType, Args, Getter, Runtime>
-  ) {
+    Runtime = never,
+  >(find: ClassableSelector<InstanceType, Args, Getter, Runtime>) {
     return (
       ...args: Runtime extends never
         ? [...classes: Array<Classable<any, any[], string, Runtime>>]
@@ -288,24 +308,12 @@ class ClassableAPI {
    * @param runtime - Optional runtime context passed to the factory resolver.
    * @returns The created instance (or Promise for async factories).
    */
-  create<InstanceType>(
-    cls: ClassType<InstanceType, []>
-  ): InstanceType;
-  create<
-    InstanceType,
-    Args extends Readonlyable<any[]>,
-    Getter extends string,
-    Runtime
-  >(
+  create<InstanceType>(cls: ClassType<InstanceType, []>): InstanceType;
+  create<InstanceType, Args extends Readonlyable<any[]>, Getter extends string, Runtime>(
     cls: ClassFactorySync<InstanceType, Args, Getter, Runtime>,
     ...args: Runtime extends never ? [] : [runtime: Runtime]
   ): InstanceType;
-  create<
-    InstanceType,
-    Args extends Readonlyable<any[]>,
-    Getter extends string,
-    Runtime
-  >(
+  create<InstanceType, Args extends Readonlyable<any[]>, Getter extends string, Runtime>(
     cls: ClassFactoryAsync<InstanceType, Args, Getter, Runtime>,
     ...args: Runtime extends never ? [] : [runtime: Runtime]
   ): Promise<InstanceType>;
@@ -313,27 +321,32 @@ class ClassableAPI {
     InstanceType,
     Args extends Readonlyable<any[]> = [],
     Getter extends string = string,
-    Runtime = never
-  >(cls: ClassType<InstanceType, Args> | Classable<InstanceType, Args, Getter, Runtime>, runtime?: Runtime): InstanceType {
+    Runtime = never,
+  >(
+    cls: ClassType<InstanceType, Args> | Classable<InstanceType, Args, Getter, Runtime>,
+    runtime?: Runtime,
+  ): InstanceType {
     if (classable.isFactory<InstanceType, Args, Getter, Runtime>(cls)) {
       const args = (cls.get?.(
         ...((runtime === undefined ? [] : [runtime]) as Runtime extends never
           ? []
-          : [runtime: Runtime])
+          : [runtime: Runtime]),
       ) ?? []) as Args;
 
       if (args instanceof Promise) {
         return args.then((resolvedArgs) => {
           if (cls.getter) {
-            return (cls.target[cls.getter] as unknown as ((...args: Args) => any))!(...resolvedArgs);
+            return (cls.target[cls.getter] as unknown as (...args: Args) => any)!(...resolvedArgs);
           } else {
-            return new cls.target(...resolvedArgs)
+            return new cls.target(...resolvedArgs);
           }
         }) as InstanceType;
       }
 
       if (cls.getter) {
-        return (cls.target[cls.getter] as unknown as ((...args: Args) => any))!(...(args as Args)) as InstanceType;
+        return (cls.target[cls.getter] as unknown as (...args: Args) => any)!(
+          ...(args as Args),
+        ) as InstanceType;
       }
 
       return new cls.target(...args);
