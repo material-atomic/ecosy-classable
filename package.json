@@ -56,6 +56,94 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.mjs",
       "require": "./dist/index.js"
+    },
+    "./classable": {
+      "types": "./dist/classable.d.ts",
+      "import": "./dist/classable.mjs",
+      "require": "./dist/classable.js"
+    },
+    "./injectable": {
+      "types": "./dist/injectable.d.ts",
+      "import": "./dist/injectable.mjs",
+      "require": "./dist/injectable.js"
+    },
+    "./inject": {
+      "types": "./dist/inject.d.ts",
+      "import": "./dist/inject.mjs",
+      "require": "./dist/inject.js"
+    },
+    "./executable": {
+      "types": "./dist/executable.d.ts",
+      "import": "./dist/executable.mjs",
+      "require": "./dist/executable.js"
+    },
+    "./executor": {
+      "types": "./dist/executor.d.ts",
+      "import": "./dist/executor.mjs",
+      "require": "./dist/executor.js"
+    },
+    "./teleportability": {
+      "types": "./dist/teleportability.d.ts",
+      "import": "./dist/teleportability.mjs",
+      "require": "./dist/teleportability.js"
+    },
+    "./teleportable": {
+      "types": "./dist/teleportable.d.ts",
+      "import": "./dist/teleportable.mjs",
+      "require": "./dist/teleportable.js"
+    },
+    "./global": {
+      "types": "./dist/global.d.ts",
+      "import": "./dist/global.mjs",
+      "require": "./dist/global.js"
+    },
+    "./transient": {
+      "types": "./dist/transient.d.ts",
+      "import": "./dist/transient.mjs",
+      "require": "./dist/transient.js"
+    },
+    "./lifecycle": {
+      "types": "./dist/lifecycle.d.ts",
+      "import": "./dist/lifecycle.mjs",
+      "require": "./dist/lifecycle.js"
+    },
+    "./placeholder": {
+      "types": "./dist/placeholder.d.ts",
+      "import": "./dist/placeholder.mjs",
+      "require": "./dist/placeholder.js"
+    },
+    "./anchorable": {
+      "types": "./dist/anchorable.d.ts",
+      "import": "./dist/anchorable.mjs",
+      "require": "./dist/anchorable.js"
+    },
+    "./anchoribility": {
+      "types": "./dist/anchoribility.d.ts",
+      "import": "./dist/anchoribility.mjs",
+      "require": "./dist/anchoribility.js"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "import": "./dist/types.mjs",
+      "require": "./dist/types.js"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "classable": ["./dist/classable.d.ts"],
+      "injectable": ["./dist/injectable.d.ts"],
+      "inject": ["./dist/inject.d.ts"],
+      "executable": ["./dist/executable.d.ts"],
+      "executor": ["./dist/executor.d.ts"],
+      "teleportability": ["./dist/teleportability.d.ts"],
+      "teleportable": ["./dist/teleportable.d.ts"],
+      "global": ["./dist/global.d.ts"],
+      "transient": ["./dist/transient.d.ts"],
+      "lifecycle": ["./dist/lifecycle.d.ts"],
+      "placeholder": ["./dist/placeholder.d.ts"],
+      "anchorable": ["./dist/anchorable.d.ts"],
+      "anchoribility": ["./dist/anchoribility.d.ts"],
+      "types": ["./dist/types.d.ts"]
     }
   },
   "scripts": {
