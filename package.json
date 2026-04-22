@@ -1,6 +1,6 @@
 {
   "name": "@ecosy/classable",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A type-safe, composable class name builder with conditional merging, variant support, and zero runtime dependencies",
   "license": "MIT",
   "publishConfig": {
@@ -11,8 +11,46 @@
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "files": [
-    "dist"
+    "dist",
+    "agents"
   ],
+  "agents": {
+    "prompts": {
+      "classable": "$this://agents/PROMPT.md"
+    },
+    "rules": {
+      "classable": "$this://agents/RULES.md"
+    },
+    "skills": {
+      "$overview": "$this://agents/skills/index.md",
+      "classable-injectable": "$this://agents/skills/classable-injectable/SKILL.md",
+      "classable-teleportability": "$this://agents/skills/classable-teleportability/SKILL.md",
+      "classable-inject": "$this://agents/skills/classable-inject/SKILL.md",
+      "classable-executable": "$this://agents/skills/classable-executable/SKILL.md",
+      "classable-lifecycle": "$this://agents/skills/classable-lifecycle/SKILL.md",
+      "classable-global-transient": "$this://agents/skills/classable-global-transient/SKILL.md",
+      "classable-placeholder": "$this://agents/skills/classable-placeholder/SKILL.md",
+      "classable-project-example": "$this://agents/skills/classable-project-example/SKILL.md"
+    },
+    "workflows": [
+      "prompts.classable",
+      "rules.classable",
+      "skills.classable-injectable",
+      "skills.classable-teleportability",
+      "skills.classable-inject",
+      "skills.classable-executable",
+      "skills.classable-lifecycle",
+      "skills.classable-global-transient",
+      "skills.classable-placeholder",
+      "skills.classable-project-example"
+    ],
+    "examples": {
+      "project": {
+        "repository": "github.com:material-atomic/ecosy-markdoc",
+        "url": "https://markdoc.ecosy.io"
+      }
+    }
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
