@@ -72,7 +72,9 @@ class ClassableAPI {
    * @param fn - The value to check.
    */
   is(fn: unknown): fn is AnyClass<any> {
-    return typeof fn === "function" && /^class\s/.test(Function.prototype.toString.call(fn));
+    // Match `class Name {`, `class Name extends`, and minified anonymous
+    // `class{...}` (some bundlers strip whitespace between `class` and `{`).
+    return typeof fn === "function" && /^class[\s{]/.test(Function.prototype.toString.call(fn));
   }
 
   /**

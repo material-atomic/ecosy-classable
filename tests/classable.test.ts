@@ -40,6 +40,31 @@ describe("classable.is", () => {
     expect(classable.is(null)).toBe(false);
     expect(classable.is(undefined)).toBe(false);
   });
+
+  it("returns true for an anonymous class", () => {
+    const Anon = class {
+      foo = 1;
+    };
+    expect(classable.is(Anon)).toBe(true);
+  });
+
+  // V8 always emits `class { ... }` with a space, so we can't easily produce
+  // a minified-style class via runtime declaration — `Function.prototype.toString`
+  // ignores own `toString` overrides. Test the regex shape directly instead.
+  it("regex accepts minifier output without whitespace before `{`", () => {
+    // Some bundlers (esbuild/swc/terser) emit `class{constructor()...}` —
+    // no whitespace between `class` and `{`. The classable.is regex must
+    // tolerate both forms or DI containers like @ecosy/markdoc fail to
+    // resolve factory-produced anonymous classes.
+    const REGEX = /^class[\s{]/;
+    expect(REGEX.test("class{constructor(){}}")).toBe(true);
+    expect(REGEX.test("class { constructor() {} }")).toBe(true);
+    expect(REGEX.test("class Foo{}")).toBe(true);
+    expect(REGEX.test("class Foo {}")).toBe(true);
+    expect(REGEX.test("class extends Foo{}")).toBe(true);
+    expect(REGEX.test("function foo(){}")).toBe(false);
+    expect(REGEX.test("classy thing")).toBe(false);
+  });
 });
 
 // ─── classable.isFactory ─────────────────────────────────────────

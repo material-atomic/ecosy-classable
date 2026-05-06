@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.1 (2026-05-06)
+
+### Fixes
+
+- **classable.is**: Regex now accepts minified anonymous classes where bundlers (esbuild/swc/terser) emit `class{constructor()...}` with no whitespace between `class` and `{`. Previously `/^class\s/` rejected such forms, causing DI containers (e.g. `@ecosy/markdoc`'s `Configuration` factory) to receive `undefined` from `classable.create()` and throw `Cannot read properties of undefined`. Updated to `/^class[\s{]/`.
+
 ## 0.2.0 (2026-04-22)
 
 ### Breaking Changes
