@@ -1,86 +1,70 @@
-export {
-  Anchorable,
-  type AnchorLike,
-  type AnchorableLike,
-} from "./anchorable";
-export {
-  Anchoribility,
-  type AnchoribilityOptions,
-  type AnchoribilityLike,
-} from "./anchoribility";
+/**
+ * `@ecosy/classable` — class tokens, and the three steps between a declaration
+ * and a live object.
+ *
+ *   declare   `Injectable({ … })`   what a class needs. Static, no instances.
+ *   compile   `compile(injects)`    once per module load. Addresses, ownership,
+ *                                   async propagation, cycles — all decided here.
+ *   execute   `ExecContext`         per request. Allocates, wires, disposes.
+ *
+ * One line runs underneath all of it: **definition happens at build time,
+ * incarnation happens at request time.** Anything static belongs to the plan;
+ * anything with a lifetime belongs to a frame.
+ */
 export { classable, type ClassableSelector } from "./classable";
-export {
-  Executable,
-  type ExecutableStatic,
-  type ExecutorDep,
-  type ResolvedInstance,
-  type ResolvedInstances,
-} from "./executable";
-export { Executor } from "./executor";
-export {
-  createInject,
-  pushScope,
-  popScope,
-} from "./inject";
-export {
-  Teleportable,
-  type TeleportableOptions,
-} from "./teleportable";
-export {
-  Teleportability,
-  type TeleportabilityOptions,
-  type TeleportabilityLike,
-} from "./teleportability";
-export { Global, type GlobalClassable, type GlobalOptions, type GlobalStatic } from "./global";
-export {
-  Transient,
-  type TransientClassable,
-  type TransientOptions,
-  type TransientStatic,
-} from "./transient";
-export {
-  Injectable,
-  InjectedAccessor,
-  type InjectClassable,
-  type InjectableBuidlerLike,
-  type InjectedInstances,
-  type InjectMap,
-  type InjectableOnInit,
-  type InjectableOnDispose,
-} from "./injectable";
-export {
-  Lifecycle,
-  type GuardLike,
-  type FilterLike,
-  type PipeLike,
-  type InterceptorLike,
-  type LifecycleDescriptor,
-  type LifecycleOptions,
-  type LifecycleStatic,
-  type WithDescriptor,
-} from "./lifecycle";
+
+/* Part of `classable`'s own surface: it exposes these as `classable.Placeholder`,
+   `classable.placeholder` and `classable.placeholderInstance`. */
 export {
   Placeholder,
   placeholder,
   placeholderInstance,
-  type ThisExtended,
-  type StaticExtended,
   type InstanceByStatic,
+  type StaticExtended,
+  type ThisExtended,
 } from "./placeholder";
+
+export { app, shared, lifetimeOf, type Lifetime } from "./lifetime";
+
+export {
+  APP_FRAME,
+  AppSlots,
+  compile,
+  identityOf,
+  link,
+  type Address,
+  type CompileOptions,
+  type Declaring,
+  type FrameIndex,
+  type InjectMap,
+  type Plan,
+  type PlanEntry,
+  type PlanProp,
+} from "./plan";
+
+export { ExecContext, Frame } from "./exec";
+
+export {
+  Injectable,
+  type Declaration,
+  type InjectableOptions,
+  type Injected,
+} from "./injectable";
+
 export type {
-  Readonlyable,
-  ClassType,
-  AnyClass,
-  AtomicClass,
   AbstractClassType,
   AnyAbstractClass,
+  AnyClass,
   AnyConstructor,
-  ClassStatic,
-  ClassFactory,
-  ClassFactorySync,
-  ClassFactoryAsync,
+  AtomicClass,
   Classable,
-  ClassableSync,
   ClassableAsync,
+  ClassableSync,
   ClassableTarget,
+  ClassFactory,
+  ClassFactoryAsync,
+  ClassFactorySync,
+  ClassStatic,
+  ClassType,
+  Readonlyable,
 } from "./types";

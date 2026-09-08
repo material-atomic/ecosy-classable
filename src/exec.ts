@@ -1,5 +1,5 @@
 import { classable } from "./classable";
-import type { Plan, PlanEntry } from "./plan";
+import type { Address, Plan, PlanEntry, PlanProp } from "./plan";
 import type { Classable } from "./types";
 
 const ASYNC_DISPOSE: symbol =
@@ -16,14 +16,14 @@ interface DisposeHooks {
 /**
  * One level of storage.
  *
- * `slots` is a flat array, not a Map: the slot index came out of the plan, so
- * there is nothing to hash and nothing to compare. `undefined` means not built
- * yet — which is the whole of the laziness mechanism.
+ * `slots` is a flat array, not a Map: the index came out of the plan, so there
+ * is nothing to hash and nothing to compare. `undefined` means not built yet,
+ * which is the whole of the laziness mechanism.
  *
- * `owned` exists separately, and it must. It holds only what this frame
- * actually constructed, in construction order. Plan entries are topologically
- * ordered, and under lazy resolution most of them are never built, so walking
- * the plan backwards to dispose would reach for instances that do not exist.
+ * `owned` is separate, and must be. Plan entries are topologically ordered and
+ * under lazy resolution most are never built, so disposing by walking the plan
+ * backwards would reach for instances that never existed. `owned` holds what
+ * this frame actually constructed, in construction order.
  */
 export class Frame {
   readonly slots: unknown[];
@@ -35,26 +35,21 @@ export class Frame {
 }
 
 /**
- * The per-execution object: the thing Nest never had.
+ * The per-execution object — the thing Nest never had.
  *
  * Nest keys request instances by `ContextId` in a `WeakMap` on every
- * `InstanceWrapper`, so a request's instances end up scattered across every
+ * `InstanceWrapper`, so one request's instances end up scattered across every
  * provider that built one. You can look one up; you can never enumerate the
- * set. Disposal needs the set — which is why there is no end-of-request hook
- * to be found in `packages/core`. There is no object to hang it on.
+ * set. Disposal needs the set, which is why there is no end-of-request hook
+ * anywhere in its core: there is no object to hang one on.
  *
- * This is that object. Identity is the object itself: no key, no registry, no
- * `globalThis` slot. A string key plus first-write-wins is how one request
- * ends up holding another request's instances, with nothing to show for it in
- * the logs.
+ * Identity is the object itself — no key, no registry, no `globalThis` slot.
+ * A string key plus first-write-wins is how one request ends up holding
+ * another request's instances, with nothing in the logs to show for it.
  */
 export class ExecContext {
-  /** frames[0] is the application frame; 1..n are the scope chain. */
   private readonly frames: Frame[];
-
-  /** Plans indexed by frame, so an entry read from frame N is built by plan N. */
   private readonly plans: (Plan | null)[];
-
   private readonly building = new Set<string>();
 
   private settled = false;
@@ -64,124 +59,146 @@ export class ExecContext {
     this.plans = plans;
   }
 
-  /**
-   * Opens the application frame. Built once, at bootstrap, and shared by every
-   * execution afterwards — so it is never disposed on the request path.
-   */
-  static application(slots: number): ExecContext {
+  /** Opens frame 0. Built once at bootstrap, shared by every execution after. */
+  static application(slots = 0): ExecContext {
     return new ExecContext([new Frame(slots)], [null]);
   }
 
-  /**
-   * Opens a scope inside this one.
-   *
-   * Frames are copied by reference, so a child reads its ancestors' slots
-   * directly — no chain walk, because the plan already said which frame. The
-   * child's own frame is the only one it may dispose.
-   */
+  /** Opens a scope inside this one. Ancestor frames are shared by reference. */
   open(plan: Plan): ExecContext {
     if (plan.frame !== this.frames.length) {
       throw new Error(
-        `[ExecContext] Plan compiled for frame ${plan.frame} cannot open at ` +
-          `depth ${this.frames.length}. Compile it with { frame: ${this.frames.length} }.`,
+        `[ExecContext] Plan compiled for frame ${plan.frame} cannot open at depth ` +
+          `${this.frames.length}. Compile it with { frame: ${this.frames.length} }.`,
       );
     }
 
-    const child = new ExecContext(
-      [...this.frames, new Frame(plan.slots)],
-      [...this.plans, plan],
-    );
-    return child;
+    return new ExecContext([...this.frames, new Frame(plan.slots)], [...this.plans, plan]);
   }
 
   private get depth(): number {
     return this.frames.length - 1;
   }
 
-  private entryFor(key: string): PlanEntry {
-    const plan = this.plans[this.depth];
-    const entry = plan?.byKey.get(key);
-    if (!entry) throw new Error(`[ExecContext] No inject declared for key "${key}".`);
-    return entry;
-  }
-
-  /** Part of the `ActiveScope` contract `inject.ts` already declares. */
+  /** Part of the `ActiveScope` contract the injector layer expects. */
   hasKey(key: string): boolean {
     return this.plans[this.depth]?.byKey.has(key) ?? false;
   }
 
   /**
-   * Resolves one key. Two array lookups decide where it lives; nothing is
-   * searched, and no `instanceof` is consulted — so two tokens sharing a base
-   * class can no longer be mistaken for one another, because they are two
-   * different numbers.
+   * Finds the entry at an address.
+   *
+   * Innermost first, because a linked plan drops what an ancestor provides —
+   * so anything not here belongs to something enclosing. The walk is bounded
+   * by scope depth, which is two or three, and every level is a Map lookup.
+   */
+  private entryAt(address: Address): PlanEntry | null {
+    const at = `${address.frame}:${address.slot}`;
+    for (let level = this.depth; level >= 0; level--) {
+      const entry = this.plans[level]?.byAddress.get(at);
+      if (entry) return entry;
+    }
+    return null;
+  }
+
+  private propFor(key: string): PlanProp {
+    const prop = this.plans[this.depth]?.byKey.get(key);
+    if (!prop) throw new Error(`[ExecContext] No inject declared for key "${key}".`);
+    return prop;
+  }
+
+  /**
+   * Resolves one declared key.
+   *
+   * Two array indices decide where the instance lives; nothing is searched and
+   * no `instanceof` is consulted, so two tokens sharing a base class can no
+   * longer be mistaken for one another — they are two different numbers.
    */
   resolve<T = unknown>(key: string): T {
-    const entry = this.entryFor(key);
+    return this.read(this.propFor(key)) as T;
+  }
 
-    // Declared, deliberately absent. No slot, no construction, nothing to own.
-    if (entry.absent) return undefined as T;
+  /** As {@link resolve}, but awaits anything the plan marked `awaits`. */
+  async resolveAsync<T = unknown>(key: string): Promise<T> {
+    return (await this.readAsync(this.propFor(key))) as T;
+  }
+
+  private read(prop: PlanProp): unknown {
+    if (prop.absent) return undefined;
+
+    const existing = this.frames[prop.frame]?.slots[prop.slot];
+    if (existing !== undefined) return existing;
+
+    const entry = this.entryAt(prop);
+    if (!entry) {
+      if (prop.optional) return undefined;
+      throw new Error(
+        `[ExecContext] Nothing provides "${prop.key}" at frame ${prop.frame} ` +
+          `slot ${prop.slot}.`,
+      );
+    }
 
     if (entry.awaits) {
       throw new Error(
-        `[ExecContext] Inject "${key}" is built asynchronously. Use resolveAsync; ` +
-          `a synchronous resolve cannot await it, and storing the promise would ` +
-          `hand callers something that only looks built.`,
+        `[ExecContext] "${prop.key}" is built asynchronously. Use resolveAsync — a ` +
+          `synchronous resolve cannot await it, and storing the promise would hand ` +
+          `callers something that only looks built.`,
       );
     }
 
-    const existing = this.read(entry);
-    if (existing !== undefined) return existing as T;
-
-    return this.build(entry) as T;
+    return this.build(entry);
   }
 
-  /** As {@link resolve}, but awaits tokens the plan marked `awaits`. */
-  async resolveAsync<T = unknown>(key: string): Promise<T> {
-    const entry = this.entryFor(key);
-    if (entry.absent) return undefined as T;
+  private async readAsync(prop: PlanProp): Promise<unknown> {
+    if (prop.absent) return undefined;
 
-    const existing = this.read(entry);
-    if (existing !== undefined) return existing as T;
+    const existing = this.frames[prop.frame]?.slots[prop.slot];
+    if (existing !== undefined) return existing;
 
-    const created = this.build(entry, true);
-    if (!(created instanceof Promise)) return created as T;
+    const entry = this.entryAt(prop);
+    if (!entry) {
+      if (prop.optional) return undefined;
+      throw new Error(
+        `[ExecContext] Nothing provides "${prop.key}" at frame ${prop.frame} ` +
+          `slot ${prop.slot}.`,
+      );
+    }
 
-    const instance = await created;
-    this.commit(entry, instance);
-    return instance as T;
+    return await this.build(entry, true);
   }
 
-  private read(entry: PlanEntry): unknown {
-    return this.frames[entry.frame]?.slots[entry.slot];
-  }
-
+  private build(entry: PlanEntry, allowAsync: false): unknown;
+  private build(entry: PlanEntry, allowAsync: true): Promise<unknown>;
+  private build(entry: PlanEntry, allowAsync?: boolean): unknown;
   private build(entry: PlanEntry, allowAsync = false): unknown {
     if (this.settled) {
       throw new Error(
-        `[ExecContext] Resolve after settle for key "${entry.key}". Its scope has ` +
-          `already ended; something is holding the context past its lifetime.`,
+        `[ExecContext] Resolve after settle. This scope has ended; something is ` +
+          `holding the context past its lifetime.`,
       );
     }
+
+    const name = (entry.token as { name?: string })?.name ?? `${entry.frame}:${entry.slot}`;
 
     if (entry.frame > this.depth) {
       throw new Error(
-        `[ExecContext] Inject "${entry.key}" belongs to frame ${entry.frame}, ` +
-          `which is deeper than this context.`,
+        `[ExecContext] "${name}" belongs to frame ${entry.frame}, deeper than this context.`,
       );
     }
 
-    if (this.building.has(entry.key)) {
+    // The plan already caught cycles; this catches a token whose constructor
+    // reaches back into the context for itself, which no static pass can see.
+    if (this.building.has(name)) {
       throw new Error(
-        `[ExecContext] Circular dependency: ${[...this.building, entry.key].join(" -> ")}`,
+        `[ExecContext] Re-entrant construction: ${[...this.building, name].join(" -> ")}`,
       );
     }
 
-    this.building.add(entry.key);
+    this.building.add(name);
     try {
       // One cast, deliberately: `create`'s overloads split plain classes from
       // sync factories from async ones, and a `Classable` union matches none of
-      // them. Re-narrowing here would only restate what `create` already decides.
+      // them. Re-narrowing would only restate what `create` already decides.
       const created = (classable.create as (cls: unknown) => unknown)(
         entry.token as Classable<unknown, unknown[], string, unknown>,
       );
@@ -189,35 +206,58 @@ export class ExecContext {
       if (created instanceof Promise) {
         if (!allowAsync) {
           throw new Error(
-            `[ExecContext] Inject "${entry.key}" returned a Promise but the plan ` +
-              `did not mark it async. Declare the factory async so callers know ` +
-              `to await it.`,
+            `[ExecContext] "${name}" returned a Promise but the plan did not mark it ` +
+              `async. Declare the factory async so callers know to await it.`,
           );
         }
-        return created;
+        return created.then((instance) => {
+          this.wire(entry, instance);
+          this.commit(entry, instance);
+          return instance;
+        });
       }
 
+      this.wire(entry, created);
       this.commit(entry, created);
       return created;
     } finally {
-      this.building.delete(entry.key);
+      this.building.delete(name);
+    }
+  }
+
+  /**
+   * Fills in a token's own dependencies, after it exists.
+   *
+   * After rather than during, because a plan describes properties, not
+   * constructor parameters — so a token is constructed bare and then wired.
+   * The cost is that a constructor cannot read its own dependencies; the gain
+   * is that a cycle between two tokens is a plan-time error rather than a
+   * runtime one.
+   */
+  private wire(entry: PlanEntry, instance: unknown): void {
+    if (!instance || typeof instance !== "object" || entry.props.length === 0) return;
+
+    for (const prop of entry.props) {
+      Object.defineProperty(instance, prop.key, {
+        value: this.read(prop),
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
     }
   }
 
   /**
    * Writes an instance into its frame, and onto that frame's dispose list.
    *
-   * Ownership follows storage, not the caller: `entry.frame` already names the
-   * frame that declared this token, so whoever happens to trigger the build,
-   * the instance is recorded against its declaring frame.
+   * Ownership follows storage, not the caller. `entry.frame` names the frame
+   * that declared the token, so whoever triggers the build, the instance is
+   * recorded against its declaring frame.
    *
-   * That distinction is not cosmetic. A nested scope resolving a `shared`
-   * token builds it into an ancestor's frame while its own entry reads
-   * `owns: false`. Registering ownership from the caller's point of view would
-   * leave the instance stored but unowned — nobody disposes it, and it lives
-   * until the process does. `owns` stays on the entry because a reader still
-   * wants to know it borrowed, but deciding it twice is how the two answers
-   * drift apart.
+   * That is not cosmetic. A nested scope resolving a shared token builds it
+   * into an ancestor's frame; recording ownership from the caller's point of
+   * view would leave it stored but unowned — nobody disposes it, and it lives
+   * as long as the process does.
    */
   private commit(entry: PlanEntry, instance: unknown): void {
     const frame = this.frames[entry.frame];
@@ -234,20 +274,17 @@ export class ExecContext {
    * Ends this scope and disposes what its own frame built, newest first.
    *
    * Reverse construction order because a dependency has to outlive its
-   * dependents. Ancestor frames are untouched — this context borrowed from
+   * dependents. Ancestor frames are untouched: this context borrowed from
    * them, it does not own them.
    *
-   * Errors are collected and returned, never thrown mid-loop and never
-   * swallowed: one failing hook must not abort the rest of the teardown, and
+   * Errors are collected and returned — never thrown mid-loop, never
+   * swallowed. One failing hook must not abort the rest of the teardown, and
    * it must not replace the response the request was about to send.
    */
   async settle(): Promise<readonly unknown[]> {
     if (this.settled) return [];
     this.settled = true;
 
-    // Only ever this context's own frame. Ancestors were borrowed from, not
-    // owned — and the application frame is settled by whoever opened it, at
-    // shutdown, never on a request path.
     const frame = this.frames[this.depth];
     if (!frame) return [];
 
