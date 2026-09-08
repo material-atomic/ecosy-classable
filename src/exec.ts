@@ -119,6 +119,9 @@ export class ExecContext {
   resolve<T = unknown>(key: string): T {
     const entry = this.entryFor(key);
 
+    // Declared, deliberately absent. No slot, no construction, nothing to own.
+    if (entry.absent) return undefined as T;
+
     if (entry.awaits) {
       throw new Error(
         `[ExecContext] Inject "${key}" is built asynchronously. Use resolveAsync; ` +
@@ -136,6 +139,7 @@ export class ExecContext {
   /** As {@link resolve}, but awaits tokens the plan marked `awaits`. */
   async resolveAsync<T = unknown>(key: string): Promise<T> {
     const entry = this.entryFor(key);
+    if (entry.absent) return undefined as T;
 
     const existing = this.read(entry);
     if (existing !== undefined) return existing as T;

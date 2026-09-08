@@ -191,6 +191,39 @@ describe("ExecContext", () => {
     expect(gone).toEqual(["Pool"]);
   });
 
+  it("resolves an absent optional key to undefined without building anything", async () => {
+    const { built, gone, mark } = tracker();
+    const maybe = undefined as unknown as ReturnType<typeof mark>;
+
+    const ctx = request(
+      compile({ real: mark("Real"), tracer: maybe }, { optional: ["tracer"] }),
+    );
+
+    expect(ctx.resolve("tracer")).toBeUndefined();
+    expect(built).toEqual([]);
+
+    ctx.resolve("real");
+    await ctx.settle();
+
+    // Nothing was built for the absent key, so nothing was owned or disposed.
+    expect(gone).toEqual(["Real"]);
+  });
+
+  it("refuses a missing token that was not declared optional", () => {
+    expect(() => compile({ tracer: undefined })).toThrow(/has no token/);
+  });
+
+  it("does not let optional swallow a failure", () => {
+    class Broken {
+      constructor() { throw new Error("constructor blew up"); }
+    }
+
+    const ctx = request(compile({ broken: Broken }, { optional: ["broken"] }));
+
+    // `optional` says absence is acceptable. It does not say failure is.
+    expect(() => ctx.resolve("broken")).toThrow(/blew up/);
+  });
+
   it("rejects a plan opened at the wrong depth", () => {
     const { mark } = tracker();
     const plan = compile({ a: mark("A") }, { frame: 2 });

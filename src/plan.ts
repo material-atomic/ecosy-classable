@@ -12,7 +12,10 @@ type Token = Classable<unknown, unknown[], string, unknown>;
  * A number rather than a label because a label only says "not mine"; it still
  * leaves the runtime walking a chain to find out whose. An index is one lookup.
  */
-export const APP_FRAME = 0;
+export const APP_FRAME: FrameIndex = 0;
+
+/** A frame's depth. Named so the runtime `Frame` object can keep the plain word. */
+export type FrameIndex = number;
 
 /**
  * Where an instance lives, decided at compile time.
@@ -29,7 +32,7 @@ export interface PlanEntry {
   readonly key: string;
   /** For error messages and debugging. Never read on the execution path. */
   readonly token: Token;
-  readonly frame: number;
+  readonly frame: FrameIndex;
   readonly lifetime: Lifetime;
   /** Does the frame that resolves this own it — and therefore have to dispose it. */
   readonly owns: boolean;
@@ -37,17 +40,29 @@ export interface PlanEntry {
   readonly awaits: boolean;
   /** Worth putting on the dispose list at all. */
   readonly disposable: boolean;
+  /**
+   * Absence is acceptable.
+   *
+   * Narrow on purpose: it only ever covers a token that is not there. A token
+   * that IS there and throws still throws, and so does anything it depends on
+   * — "may be missing" is not "may fail". It does not propagate either: an
+   * optional dependency on something that itself requires a missing token is
+   * a failure, not an absence.
+   */
+  readonly optional: boolean;
+  /** Nothing to build: an optional key whose token was not supplied. Resolves to `undefined`. */
+  readonly absent: boolean;
 }
 
 export interface Plan {
-  readonly frame: number;
+  readonly frame: FrameIndex;
   readonly entries: readonly PlanEntry[];
   readonly byKey: ReadonlyMap<string, PlanEntry>;
   /** How many slots this plan needs in its own frame. */
   readonly slots: number;
 }
 
-export type InjectMap = Record<string, Classable<never, never[], string, never>>;
+export type InjectMap = Record<string, Classable<never, never[], string, never> | null | undefined>;
 
 /**
  * Slot assignment for frame 0.
@@ -125,7 +140,13 @@ function awaitsOf(token: unknown): boolean {
 
 export interface CompileOptions {
   /** Which frame this plan executes in. 1 unless it is nested deeper. */
-  frame?: number;
+  frame?: FrameIndex;
+  /**
+   * Keys whose token may be absent. Listed here rather than wrapped at the
+   * authoring site so the inject map stays a plain map of key to token — and
+   * so a key can be optional even when there is no token to wrap.
+   */
+  optional?: readonly string[];
   /** Slot assignment for frame 0. Required once any token is branded app-wide. */
   app?: AppSlots;
 }
@@ -147,6 +168,7 @@ export function compile(injects: InjectMap, options: CompileOptions = {}): Plan 
     );
   }
 
+  const optionalKeys = new Set(options.optional ?? []);
   const entries: PlanEntry[] = [];
   const byKey = new Map<string, PlanEntry>();
   let nextSlot = 0;
@@ -155,8 +177,33 @@ export function compile(injects: InjectMap, options: CompileOptions = {}): Plan 
     if (byKey.has(key)) {
       throw new Error(`[Plan] Duplicate inject key "${key}".`);
     }
+
+    const optional = optionalKeys.has(key);
+
     if (!token) {
-      throw new Error(`[Plan] Inject key "${key}" has no token.`);
+      if (!optional) {
+        throw new Error(
+          `[Plan] Inject key "${key}" has no token. List it in \`optional\` if ` +
+            `absence is acceptable.`,
+        );
+      }
+
+      // Nothing to build, so no slot is spent and no lifetime applies.
+      const absent: PlanEntry = {
+        key,
+        token: undefined as unknown as Token,
+        lifetime: "scoped",
+        frame,
+        slot: -1,
+        owns: false,
+        awaits: false,
+        disposable: false,
+        optional: true,
+        absent: true,
+      };
+      entries.push(absent);
+      byKey.set(key, absent);
+      continue;
     }
 
     const lifetime = lifetimeOf(token);
@@ -184,6 +231,8 @@ export function compile(injects: InjectMap, options: CompileOptions = {}): Plan 
       owns: lifetime !== "app",
       awaits: awaitsOf(token),
       disposable: disposableOf(token),
+      optional,
+      absent: false,
     };
 
     entries.push(entry);
@@ -232,6 +281,12 @@ export function link(plan: Plan, ancestors: readonly Plan[]): Plan {
   let changed = false;
 
   for (const entry of plan.entries) {
+    if (entry.absent) {
+      entries.push(entry);
+      byKey.set(entry.key, entry);
+      continue;
+    }
+
     const provider = entry.lifetime === "shared" ? provided.get(identityOf(entry.token)) : undefined;
 
     // An entry already at this frame is the declaration itself, not a borrow.
