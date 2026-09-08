@@ -294,8 +294,8 @@ export function compile(injects: InjectMap, options: CompileOptions = {}): Plan 
 export function link(plan: Plan, ancestors: readonly Plan[]): Plan {
   const provided = new Map<unknown, PlanEntry>();
   for (const ancestor of ancestors) {
-    for (const [identity, entry] of ancestor.index) {
-      if (entry.lifetime === "shared") provided.set(identity, entry);
+    for (const entry of ancestor.entries) {
+      if (entry.lifetime === "shared") provided.set(identityOf(entry.token), entry);
     }
   }
 
@@ -305,8 +305,13 @@ export function link(plan: Plan, ancestors: readonly Plan[]): Plan {
   const moved = new Map<string, Address>();
   const kept: PlanEntry[] = [];
 
-  for (const [identity, entry] of plan.index) {
-    const provider = provided.get(identity);
+  // Iterating `entries`, not `index`. `entries` is the ordered, complete record;
+  // `index` answers "which entry for this token", which is a question with one
+  // answer by construction. Walking a token-keyed map to rebuild an ordered list
+  // works only while those two happen to hold the same things in the same order
+  // — an invariant nothing states and nothing checks.
+  for (const entry of plan.entries) {
+    const provider = provided.get(identityOf(entry.token));
 
     if (provider && provider.frame !== plan.frame) {
       moved.set(`${entry.frame}:${entry.slot}`, {

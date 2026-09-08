@@ -276,3 +276,23 @@ describe("lifetime ordering", () => {
     expect(compile({ pool: Pool }, { app: slots }).entries[0]!.frame).toBe(0);
   });
 });
+
+describe("link", () => {
+  it("keeps entries topologically ordered", () => {
+    class Db {}
+    class Repo extends Injectable({ db: Db }) {}
+    const Tx = shared(class Tx {});
+
+    const outer = compile({ tx: Tx }, { frame: 1 });
+    const inner = link(compile({ repo: Repo, tx: Tx }, { frame: 2 }), [outer]);
+
+    const order = inner.entries.map((e) => (e.token as { name?: string }).name);
+
+    // A dependency must still precede its dependent after relinking. The order
+    // is a property of `entries`; rebuilding the list from a token-keyed map
+    // would preserve it only by coincidence of insertion order.
+    expect(order.indexOf("Db")).toBeLessThan(order.indexOf("Repo"));
+    // The shared token moved to the ancestor, so it is gone from this plan.
+    expect(order).not.toContain("Tx");
+  });
+});
