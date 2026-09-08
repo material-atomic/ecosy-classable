@@ -296,3 +296,21 @@ describe("link", () => {
     expect(order).not.toContain("Tx");
   });
 });
+
+describe("wiring", () => {
+  it("writes plain own properties, in plan order", () => {
+    class Db {}
+    class Log {}
+    class Repo extends Injectable({ db: Db, log: Log }) {}
+
+    const ctx = request(compile({ repo: Repo }));
+    const repo = ctx.resolve<Repo>("repo");
+
+    // Same keys, same order, every instance — which is what keeps the object's
+    // shape stable across requests instead of megamorphic.
+    expect(Object.keys(repo)).toEqual(["db", "log"]);
+
+    const descriptor = Object.getOwnPropertyDescriptor(repo, "db")!;
+    expect(descriptor).toMatchObject({ enumerable: true, writable: true, configurable: true });
+  });
+});

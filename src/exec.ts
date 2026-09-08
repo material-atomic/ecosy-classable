@@ -237,13 +237,20 @@ export class ExecContext {
   private wire(entry: PlanEntry, instance: unknown): void {
     if (!instance || typeof instance !== "object" || entry.props.length === 0) return;
 
+    // Plain assignment, not `Object.defineProperty`.
+    //
+    // The descriptor here was `{ enumerable, configurable, writable }` all true
+    // — which is what assignment produces on a fresh object anyway. So the
+    // descriptor bought nothing, and cost three things per property per
+    // request: the slow path into the property-definition machinery, a fresh
+    // descriptor object allocated and immediately discarded, and a hidden-class
+    // transition that assignment in a fixed order does not force.
+    //
+    // Fixed order matters as much as the operation. `entry.props` comes from
+    // the plan, so every instance of a token takes the same keys in the same
+    // sequence, and the shape stays monomorphic across requests.
     for (const prop of entry.props) {
-      Object.defineProperty(instance, prop.key, {
-        value: this.read(prop),
-        enumerable: true,
-        configurable: true,
-        writable: true,
-      });
+      (instance as Record<string, unknown>)[prop.key] = this.read(prop);
     }
   }
 
