@@ -20,7 +20,38 @@ interface Branded {
   [LIFETIME]?: Lifetime;
 }
 
+/**
+ * Tokens whose lifetime has already been read by a compile.
+ *
+ * A brand is one choice with many readers, and the readers run at module load —
+ * so the choice has to happen earlier in the IMPORT GRAPH, not merely earlier in
+ * some `main()`. Get that wrong and `lifetimeOf` answers `scoped` for something
+ * meant to live in frame 0: one instance per request instead of one per process,
+ * with nothing thrown and nothing logged.
+ *
+ * Sealing turns that into a loud failure at the moment the order is violated,
+ * which is the only moment the stack still shows who violated it.
+ */
+const sealed = new WeakSet<object>();
+
+/** Called by `compile` when it reads a brand: from here on the answer is fixed. */
+export function sealLifetime(token: unknown): void {
+  if (token && (typeof token === "object" || typeof token === "function")) {
+    sealed.add(token as object);
+  }
+}
+
 function brand<T>(token: T, lifetime: Lifetime): T {
+  if (token && sealed.has(token as object)) {
+    const name = (token as { name?: string }).name ?? "token";
+    throw new Error(
+      `[Lifetime] "${name}" was already compiled as ${lifetimeOf(token)}, so marking ` +
+        `it ${lifetime} now would only change what later compiles see. Mark it in a ` +
+        `module the compiling module imports — earlier in the import graph, not ` +
+        `merely earlier in a function.`,
+    );
+  }
+
   const existing = (token as Branded)[LIFETIME];
 
   if (existing && existing !== lifetime) {

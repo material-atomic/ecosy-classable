@@ -1,5 +1,5 @@
 import { classable } from "./classable";
-import { type Lifetime, lifetimeOf } from "./lifetime";
+import { type Lifetime, lifetimeOf, sealLifetime } from "./lifetime";
 import type { Classable } from "./types";
 
 type Token = Classable<unknown, unknown[], string, unknown>;
@@ -212,6 +212,10 @@ export function compile(injects: InjectMap, options: CompileOptions = {}): Plan 
     }
 
     const lifetime = lifetimeOf(identity);
+    // From here the answer is fixed: a later `app()` or `shared()` on this token
+    // would change only what a LATER compile sees, and silently disagree with
+    // what this plan already decided.
+    sealLifetime(identity);
 
     if (lifetime === "app" && !options.app) {
       const name = (identity as { name?: string })?.name ?? "token";

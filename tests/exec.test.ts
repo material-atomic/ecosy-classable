@@ -256,3 +256,23 @@ describe("Injectable", () => {
     expect(() => Injectable({ db: Db }, { optional: ["nope" as "db"] })).toThrow(/not a declared/);
   });
 });
+
+describe("lifetime ordering", () => {
+  it("refuses a brand applied after the token has been compiled", () => {
+    class Pool {}
+
+    compile({ pool: Pool });
+
+    // Silently answering `scoped` here would mean one instance per request for
+    // something meant to live once per process — no throw, no log, just a
+    // connection pool that is not a pool.
+    expect(() => app(Pool)).toThrow(/already compiled/);
+  });
+
+  it("accepts a brand applied before any compile", () => {
+    const Pool = app(class Pool {});
+    const slots = new AppSlots();
+
+    expect(compile({ pool: Pool }, { app: slots }).entries[0]!.frame).toBe(0);
+  });
+});
